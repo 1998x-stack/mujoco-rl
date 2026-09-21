@@ -1,76 +1,68 @@
-# MuJoCo Ant SAC — Windows, Linux, macOS
+# MuJoCo Ant-v5 SAC — Windows / Linux / macOS
 
-Cross-platform source project for training a simulated quadruped on Gymnasium **Ant-v5** using MuJoCo physics and Stable-Baselines3 **SAC**. Includes automatic local Python setup, a small training smoke test, longer experiments, checkpoint/replay-buffer save and resume, model evaluation, TensorBoard, live viewing, and optional MP4 recording.
+Cross-platform Python project for training a simulated quadruped with Gymnasium, MuJoCo and Stable-Baselines3 SAC. Includes automated environment setup, physics checks, training, evaluation, reward plots, checkpoint recovery, interactive playback, and optional MP4 output. **No pretrained walking policy is bundled:** the default 2,048-step run is a software pipeline smoke test, not a guarantee of learned locomotion.
 
-**The repository does not contain a pretrained model or bundled third-party binaries.** Initial setup needs internet, sufficient free space, a compatible 64-bit system, and (for video/live visualization) working graphics drivers. The default **2,048-step smoke test checks the pipeline; it does not teach the robot to walk.** Training quality is not guaranteed by any fixed number of steps.
+## Getting started
 
-## Quick start
+Download/clone the repository to a writable local directory. First run requires a compatible 64-bit computer, an internet connection to download Python and packages, and sufficient free disk space. Python 3.11 is provisioned locally by `uv` when necessary; no Conda, Unity, or WSL is required.
 
-### Windows 10/11 (native PowerShell / CMD; WSL not required)
+**macOS / Linux** (Terminal):
+
+```bash
+git clone https://github.com/1998x-stack/mujoco-rl.git
+cd mujoco-rl
+chmod +x run.sh setup.sh watch.sh test.sh
+./run.sh
+```
+
+**Windows 10/11** (PowerShell or CMD): clone/extract the repository, open a terminal in its root and run:
 
 ```powershell
 .\run.cmd
-.\run.cmd -Full -Resume
-.\watch.cmd
 ```
 
-To skip graphics on a remote host: `.\run.cmd -NoVideo -NoOpen`. A PowerShell-native alternative is `.\run.ps1`, provided your session permits running scripts. `run.cmd` invokes PowerShell in a separate process using a process-scoped execution policy; it does not change persistent settings.
+On a Linux server without a graphical desktop, the runner automatically skips video. On macOS remote SSH, video is disabled by default. On Windows, use `.\run.cmd -NoVideo` when a usable OpenGL context is unavailable. The optional MP4 recording reports a warning rather than failing the already completed training pipeline.
 
-### Linux/macOS
+## Training and safe reruns
 
-```bash
-chmod +x run.sh setup.sh watch.sh test.sh
-./run.sh
-./run.sh --full --resume
-./watch.sh
-```
-
-On a headless Linux server use `./run.sh --no-video --no-open`; when no display is detected, the default Linux runner skips video automatically. Optional `./run.sh --headless-video --resume --steps 1024` requires OSMesa/OpenGL system runtime libraries. On macOS the live-viewing launcher prefers MuJoCo's `mjpython` when installed.
-
-## What one command does
-
-1. Installs official uv to local `.tools/bin` if needed; creates local Python 3.11 `.venv` and installs `requirements.txt` packages. No WSL or Conda required; Linux graphics drivers/system libraries may require approved OS-level installation.
-2. Runs a non-graphical MuJoCo Ant-v5 physics/control check (`src.check_env`).
-3. Trains SAC for 2,048 environment steps by default (`src.train`), writing model/replay buffer and periodic checkpoints; logs TensorBoard metrics.
-4. Evaluates the policy on three episodes and writes `logs/evaluation.json`; generates a PNG rewards chart when episodes are available.
-5. Renders and optionally opens `videos/ant_demo.mp4` when a working graphics backend exists; use `--no-video`/`-NoVideo` to skip rendering.
-
-The success message indicates a completed **software pipeline**, not a learned walking gait.
-
-## Commands
-
-| Action | Linux/macOS | Windows |
+| Task | macOS / Linux | Windows |
 |---|---|---|
-| First run | `./run.sh` | `.\run.cmd` |
-| Train 1M additional steps | `./run.sh --full --resume` | `.\run.cmd -Full -Resume` |
-| Train 100k more | `./run.sh --steps 100000 --resume` | `.\run.cmd -Steps 100000 -Resume` |
-| Disable video | `./run.sh --no-video` | `.\run.cmd -NoVideo` |
-| Live viewer | `./watch.sh` | `.\watch.cmd` |
-| Tests | `./test.sh` | `.\test.cmd` |
-| TensorBoard | `./.venv/bin/tensorboard --logdir logs` | `.\.venv\Scripts\tensorboard.exe --logdir logs` |
+| First run: train 2,048 steps | `./run.sh` | `.\run.cmd` |
+| Resume with 1,000,000 additional steps | `./run.sh --full --resume` | `.\run.cmd -Full -Resume` |
+| Resume with 100,000 additional steps | `./run.sh --steps 100000 --resume` | `.\run.cmd -Steps 100000 -Resume` |
+| Start a new experiment, archiving active outputs | `./run.sh --fresh` | `.\run.cmd -Fresh` |
+| Disable optional MP4 | `./run.sh --no-video` | `.\run.cmd -NoVideo` |
+| Open live simulation | `./watch.sh` | `.\watch.cmd` |
+| Unit tests and physics check | `./test.sh` | `.\test.cmd` |
 
-See [Commands](docs/COMMANDS.md), [Architecture](docs/ARCHITECTURE.md), and [Troubleshooting](docs/TROUBLESHOOTING.md). For a different viewing model, use `--model models/ant_sac_latest.zip` (POSIX) or `-Model models/ant_sac_latest.zip` (Windows). A first run with `--resume` or `-Resume` is invalid until the latest model exists.
+**Existing training artifacts cannot be silently overwritten.** After the first run, choose `--resume`/`-Resume` to continue, or `--fresh`/`-Fresh` to archive existing active artifacts and begin a separate experiment. `--full` does not implicitly resume. Both launchers also offer `--help` / `-Help`.
+
+## Checkpoint storage and reproducibility
+
+Each completed training invocation writes `models/snapshots/snapshot-*/model.zip` and `replay_buffer.pkl`, calculates SHA-256 checksums and atomically publishes `models/latest.json` only after both files have been saved. A failed save leaves the previous pointer in place. `--resume` validates the model and replay buffer pair; it refuses to silently resume from an incomplete pair. Historical `models/ant_sac_latest.zip` and `models/ant_sac_replay_buffer.pkl` are accepted for migration when no new snapshot is present. Older immutable snapshots stay on disk until explicitly cleaned up, so longer experiments can consume substantial disk space.
+
+`models/best/best_model.zip` is the best *evaluated* model; `models/best/score.json` persists its selection score across resume operations. `src.evaluate`, `src.play` and `src.record` prefer the best model and fall back to the latest snapshot. To use an explicit model instead, pass `--model /path/to/model.zip` to those Python modules.
+
+These snapshots protect against a partial application-level save; they do not guarantee bitwise-identical continuation after a process restart, nor durability against disk failure or power loss. Python package requirements specify ranges rather than an immutable per-platform lockfile. Record package versions, seeds, hardware and evaluation protocol for comparative experiments.
 
 ## Project layout
 
 ```text
-run.sh / run.ps1 / run.cmd          end-to-end platform launchers
-setup.sh / setup.ps1 / setup.cmd    local Python and dependency setup
-watch.sh / watch.ps1 / watch.cmd    live viewer
- test.sh / test.ps1 / test.cmd     unit and physics checks
-requirements.txt / .python-version
-src/common.py, check_env.py, train.py, evaluate.py, play.py, record.py, plot.py
-tests/test_project.py
-docs/ARCHITECTURE.md, COMMANDS.md, TROUBLESHOOTING.md
-models/, logs/, videos/            generated artifacts (ignored by Git)
+run.sh, run.ps1, run.cmd        end-to-end OS-native launchers
+setup.sh, setup.ps1, setup.cmd  project-local Python + dependencies
+watch.sh, watch.ps1, watch.cmd  interactive replay
+test.sh, test.ps1, test.cmd     unit tests + physics check
+requirements.txt              Python dependencies
+src/checkpoint.py             integrity-checked snapshots + best score
+src/train.py                  SAC training, evaluation callbacks, resume
+src/check_env.py              non-graphical physics smoke test
+src/evaluate.py               independent evaluation + JSON summary
+src/play.py, src/record.py    live viewer / optional MP4
+src/common.py, src/plot.py    shared configuration / reward plot
+tests/test_project.py         dependency-free contract/failure tests
+docs/REVIEW.md                engineering review and validation matrix
+.github/workflows/ci.yml      Windows/Linux/macOS checks
+models/, logs/, videos/        generated run artifacts (gitignored)
 ```
 
-## Reproducibility and limits
-
-Ant-v5 has eight continuous actuator actions and usually 105 observation values in its default configuration. Its task rewards forward locomotion, not navigation to arbitrary goal coordinates. SAC training uses CPU for portability. `--resume` loads the latest model plus replay buffer when available, but does not restore every random/environment/process state, so it is not bitwise identical to an uninterrupted run. Checkpoints, old evaluations, and stored buffers may take disk space. For independent experiments, archive previous models and logs first. This is a pure RL project, not an LLM/MCP or real-robot controller.
-
-The setup scripts download the official uv installer from astral.sh when necessary. Review downloaded installers and follow your device's security policies; the scripts do not request elevation or change persistent OS security settings.
-
-Official sources: [MuJoCo](https://mujoco.readthedocs.io/en/stable/python.html), [Gymnasium Ant](https://gymnasium.farama.org/environments/mujoco/ant/), [SB3 SAC](https://stable-baselines3.readthedocs.io/en/master/modules/sac.html), [uv](https://docs.astral.sh/uv/getting-started/installation/).
-
-The project-specific code is an educational example; third-party libraries retain their own licenses.
+Detailed documentation: [Architecture](docs/ARCHITECTURE.md), [Commands](docs/COMMANDS.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Engineering review](docs/REVIEW.md). The physics environment is Gymnasium `Ant-v5`, using eight continuous actuator controls; the robot is entirely simulated, with no real hardware, API keys or LLM provider required.
