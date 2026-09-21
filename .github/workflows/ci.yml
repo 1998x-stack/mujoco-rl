@@ -24,6 +24,15 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Smoke test Ant-v5 physics
         run: python -m src.check_env --steps 32
+      - name: SAC training and snapshot-resume integration
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python -m src.train --steps 260 --eval-freq 260 --checkpoint-freq 260
+          python -m src.train --steps 4 --resume --eval-freq 4 --checkpoint-freq 4
+          python -m src.evaluate --episodes 1
+          test -s models/latest.json
+          test -s logs/evaluation.json
       - name: Run Bash syntax checks
         if: runner.os != 'Windows'
         shell: bash
