@@ -4,13 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 case "$(uname -s)" in Darwin|Linux) ;; *) echo 'For Windows use setup.ps1 or run.cmd.' >&2; exit 2 ;; esac
-command -v curl >/dev/null 2>&1 || { echo 'curl is required. Install curl with your OS package manager.' >&2; exit 2; }
 mkdir -p "$ROOT/.tools/bin"
 if [[ -x "$ROOT/.tools/bin/uv" ]]; then
   UV="$ROOT/.tools/bin/uv"
 elif command -v uv >/dev/null 2>&1; then
   UV="$(command -v uv)"
 else
+  command -v curl >/dev/null 2>&1 || { echo 'curl is needed to install uv. Install curl, or install uv separately.' >&2; exit 2; }
   echo '[setup] Downloading official uv installer (first run requires internet).'
   installer="$(mktemp "${TMPDIR:-/tmp}/uv-install.XXXXXXXX")"
   trap 'rm -f "$installer"' EXIT

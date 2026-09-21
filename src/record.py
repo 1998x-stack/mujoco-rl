@@ -22,7 +22,7 @@ def main() -> None:
     env = make_env(render_mode="rgb_array")
     try:
         obs, _ = env.reset(seed=3000)
-        with imageio.get_writer(output, fps=25, codec="libx264", macro_block_size=16) as video:
+        with imageio.get_writer(output, fps=round(1 / env.unwrapped.dt), codec="libx264", macro_block_size=16) as video:
             for _ in range(args.frames):
                 frame = env.render()
                 if frame is None:

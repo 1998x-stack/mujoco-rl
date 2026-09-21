@@ -31,8 +31,14 @@ def make_env(*, render_mode: str | None = None, seed: int | None = None, monitor
 
 
 def resolve_model(model: str | None = None) -> Path:
-    """Prefer evaluated best model, falling back to latest model."""
-    candidate = Path(model).expanduser() if model else (BEST_MODEL if BEST_MODEL.is_file() else FINAL_MODEL)
+    """Prefer evaluated best model, falling back to latest snapshot or legacy model."""
+    if model:
+        candidate = Path(model).expanduser()
+    elif BEST_MODEL.is_file():
+        candidate = BEST_MODEL
+    else:
+        from .checkpoint import latest_model_path
+        candidate = latest_model_path() or FINAL_MODEL
     if not candidate.is_file():
         raise FileNotFoundError(f"No model at {candidate}. Run ./run.sh first, or supply --model PATH.")
     return candidate
