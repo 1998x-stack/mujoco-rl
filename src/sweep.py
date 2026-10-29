@@ -122,6 +122,11 @@ def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
              "--seed", str(eval_seed)],
             cwd=ROOT, env=env, check=True,
         )
+        if publication:
+            # Validate the actual replay/model snapshot and evaluated policy
+            # before accepting a run into an official local scorecard.
+            subprocess.run([sys.executable, "-m", "src.verify", "--require-evaluation"],
+                           cwd=ROOT, env=env, check=True)
         reports.append(run_root / "logs" / "evaluation.json")
     results = aggregate(reports, min_seeds=len(seeds), publication=publication)
     destination = suite_root / "benchmark.json"
