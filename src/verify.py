@@ -14,6 +14,7 @@ from pathlib import Path
 from .checkpoint import load_checkpoint_paths
 from .common import ENV_ID, LOGS, MODELS
 from .provenance import comparable_digest, read_manifest
+from .quality import validate_quality
 
 
 def file_hash(path: Path) -> str:
@@ -51,7 +52,7 @@ def audit(*, require_evaluation: bool = False) -> dict:
         raise ValueError("Missing required evaluation.json")
     if evaluation_file.is_file():
         evaluation = json.loads(evaluation_file.read_text(encoding="utf-8"))
-        if evaluation.get("schema") != 2 or evaluation.get("environment") != ENV_ID:
+        if evaluation.get("schema") not in (2, 3) or evaluation.get("environment") != ENV_ID:
             raise ValueError("Evaluation schema or environment mismatch")
         if evaluation.get("training_seed") != contract["seed"]:
             raise ValueError("Evaluation training seed differs from manifest")
@@ -75,6 +76,17 @@ def audit(*, require_evaluation: bool = False) -> dict:
         if not isclose(sum(scores) / len(scores), float(evaluation.get("mean_reward")),
                        rel_tol=1e-8, abs_tol=1e-7):
             raise ValueError("Evaluation summary does not match episode rewards")
+        if evaluation["schema"] == 3:
+            quality = validate_quality(episodes, evaluation.get("quality"))
+            if not isclose(quality["mean_forward_displacement_x"],
+                           float(evaluation.get("mean_forward_displacement_x")),
+                           rel_tol=1e-8, abs_tol=1e-7):
+                raise ValueError("Evaluation reported displacement differs from episode measurements")
+            expected_versions = {k: manifest["packages"].get(k)
+                                 for k in ("gymnasium", "mujoco", "stable-baselines3")}
+            if evaluation.get("environment_versions") != expected_versions:
+                raise ValueError("Evaluation library versions differ from training manifest")
+            result["trajectory_quality_verified"] = True
         result["evaluation_verified"] = True
         result["mean_reward"] = evaluation["mean_reward"]
         result["evaluation_episodes"] = len(episodes)
