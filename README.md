@@ -17,8 +17,8 @@ After installing project dependencies using `./setup.sh` (macOS/Linux) or
 # Isolated experiment directories: runs/ant-sac-baseline/seed-0/...seed-4
 python -m src.sweep --name ant-sac-baseline --seeds 0,1,2,3,4 --steps 1000000 --episodes 10
 
-# After a machine interruption: additional steps per existing seed
-python -m src.sweep --name ant-sac-baseline --seeds 0,1,2,3,4 --steps 100000 --resume
+# After an interruption: idempotently reach the requested cumulative budget
+python -m src.sweep --name ant-sac-baseline --seeds 0,1,2,3,4 --steps 1000000 --resume
 
 # No additional training; reevaluate saved snapshots with common episode seeds
 python -m src.sweep --name ant-sac-baseline --seeds 0,1,2,3,4 --evaluate-only
@@ -56,7 +56,7 @@ Linux integration job also exercises independent seed isolation and
 benchmark aggregation. Check the latest Actions results before claiming
 that any specific revision passed.
 
-See [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md).
+Validate the resulting artifacts using \`python -m src.verify --require-evaluation\` in each experiment's output root. The multi-seed suite resumes to a **target total** training budget; unlike \`src.train --steps\`, it does not repeat completed steps on retry. The aggregator refuses unequal budgets.\n\nSee [Production readiness](docs/PRODUCTION_READINESS.md), [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md).
 **Load only trusted model and replay-buffer artifacts:** a checksum checks
 integrity, not authenticity. This is simulated locomotion, not a
 safety-certified real-world robot controller.
