@@ -62,6 +62,9 @@ def read_manifest(path: Path | None = None) -> dict | None:
         raise ValueError(f"Invalid experiment manifest: {path}")
     if data.get("fingerprint") != contract_digest(data["contract"]):
         raise ValueError(f"Experiment manifest fingerprint mismatch: {path}")
+    comparable = data.get("configuration_fingerprint")
+    if comparable is not None and comparable != comparable_digest(data["contract"]):
+        raise ValueError(f"Experiment configuration fingerprint mismatch: {path}")
     return data
 
 
