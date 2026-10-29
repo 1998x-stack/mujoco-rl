@@ -37,6 +37,9 @@ def load_report(path: Path) -> dict:
         raise ValueError(f"Missing shared configuration fingerprint: {path}")
     if not isinstance(report.get("model_sha256"), str) or len(report["model_sha256"]) != 64:
         raise ValueError(f"Missing model SHA256: {path}")
+    budget = report.get("training_budget_timesteps")
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
+        raise ValueError(f"Missing verified training budget: {path}")
     episodes = report.get("episodes")
     if not isinstance(episodes, list) or not episodes:
         raise ValueError(f"Report contains no episodes: {path}")
@@ -51,6 +54,7 @@ def load_report(path: Path) -> dict:
         raise ValueError(f"Missing model path: {path}")
     return {
         "training_seed": seed,
+        "training_budget_timesteps": budget,
         "evaluation_seed": eval_seed,
         "episode_count": len(episodes),
         "mean_reward": avg,
@@ -87,6 +91,9 @@ def aggregate(paths: list[Path], *, min_seeds: int = 2, bootstrap_samples: int =
     fingerprints = {item["configuration_fingerprint"] for item in reports}
     if len(fingerprints) != 1:
         raise ValueError("Training configuration differs across seeds")
+    budgets = {item["training_budget_timesteps"] for item in reports}
+    if len(budgets) != 1:
+        raise ValueError("Unequal training budgets: refuse an unfair cross-seed comparison")
     scores = [item["mean_reward"] for item in reports]
     center = mean(scores)
     rng = Random(bootstrap_seed)
@@ -101,6 +108,7 @@ def aggregate(paths: list[Path], *, min_seeds: int = 2, bootstrap_samples: int =
         "algorithm": "SAC",
         "configuration_fingerprint": next(iter(fingerprints)),
         "number_of_training_seeds": len(seeds),
+        "training_budget_timesteps": next(iter(budgets)),
         "evaluation_seed": eval_seed,
         "episodes_per_seed": episode_count,
         "mean_reward": center,
