@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from src import benchmark, provenance, sweep
+from src import benchmark, checkpoint, provenance, sweep, verify
 
 
 def fake_report(path: Path, seed: int, rewards=(2.0, 4.0), *,
@@ -147,6 +147,49 @@ class SuiteTests(unittest.TestCase):
                 self.assertEqual(roots[2], roots[3])
                 self.assertNotEqual(roots[0], roots[2])
                 self.assertEqual(agg.call_count, 1)
+
+
+class FakeModel:
+    num_timesteps = 260
+
+    def save(self, path):
+        Path(path).write_bytes(b"policy-model")
+
+    def save_replay_buffer(self, path):
+        Path(path).write_bytes(b"replay-data")
+
+
+class AuditTests(unittest.TestCase):
+    def test_manifest_checkpoint_evaluation_and_tampering(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            models, logs = root / "models", root / "logs"
+            logs.mkdir()
+            with patch.object(checkpoint, "SNAPSHOTS", models / "snapshots"), \
+                 patch.object(checkpoint, "LATEST", models / "latest.json"), \
+                 patch.object(provenance, "MANIFEST", models / "experiment.json"), \
+                 patch.object(verify, "MODELS", models), \
+                 patch.object(verify, "LOGS", logs):
+                models.mkdir()
+                manifest = provenance.create_manifest(seed=42)
+                snapshot = checkpoint.save_checkpoint(FakeModel(), seed=42)
+                model = snapshot / "model.zip"
+                self.assertFalse(verify.audit()["evaluation_verified"])
+                with self.assertRaisesRegex(ValueError, "Missing required evaluation"):
+                    verify.audit(require_evaluation=True)
+                fake_report(logs / "evaluation.json", seed=42, rewards=(1.0, 3.0))
+                path = logs / "evaluation.json"
+                data = json.loads(path.read_text())
+                data["model"] = str(model)
+                data["model_sha256"] = verify.file_hash(model)
+                data["training_budget_timesteps"] = 260
+                data["contract_fingerprint"] = manifest["fingerprint"]
+                path.write_text(json.dumps(data))
+                self.assertTrue(verify.audit(require_evaluation=True)["evaluation_verified"])
+                data["model_sha256"] = "0" * 64
+                path.write_text(json.dumps(data))
+                with self.assertRaisesRegex(ValueError, "modified since evaluation"):
+                    verify.audit(require_evaluation=True)
 
 
 if __name__ == "__main__":
