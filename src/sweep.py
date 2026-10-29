@@ -43,6 +43,24 @@ def validate_name(name: str) -> str:
     return name
 
 
+def saved_training_steps(run_root: Path, seed: int) -> int:
+    """Read a strict latest-pointer metadata record before scheduling resume.
+
+    The training subprocess independently verifies SHA256 model/replay integrity.
+    """
+    pointer_path = run_root / "models" / "latest.json"
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    snapshot = pointer.get("snapshot")
+    if pointer.get("schema") != 1 or not isinstance(snapshot, str) or not re.fullmatch(r"snapshot-[a-f0-9]{32}", snapshot):
+        raise ValueError(f"Malformed latest snapshot pointer: {pointer_path}")
+    meta_path = run_root / "models" / "snapshots" / snapshot / "metadata.json"
+    metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    steps = metadata.get("timesteps")
+    if metadata.get("schema") != 1 or metadata.get("environment") != "Ant-v5" or metadata.get("seed") != seed or isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError(f"Incompatible training metadata: {meta_path}")
+    return steps
+
+
 def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
                   base_dir: Path, resume: bool = False, evaluate_only: bool = False,
                   eval_seed: int = 1000, device: str = "cpu") -> Path:
@@ -54,6 +72,7 @@ def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
     suite_root = base_dir.expanduser().resolve() / name
     # A partially completed suite is never overwritten with fresh training.
     # --resume is explicit and each subprocess validates its own manifest.
+    previous_steps = {}
     for seed in seeds:
         run_root = suite_root / f"seed-{seed}"
         if not resume and not evaluate_only and any(
@@ -63,22 +82,29 @@ def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
             raise FileExistsError(f"Existing artifacts at {run_root}; use --resume or a new --name")
         if (resume or evaluate_only) and not (run_root / "models" / "latest.json").is_file():
             raise FileNotFoundError(f"No completed snapshot for seed={seed}: {run_root}")
+        if resume:
+            previous_steps[seed] = saved_training_steps(run_root, seed)
+            if previous_steps[seed] > steps:
+                raise ValueError(f"Seed={seed} already exceeds target budget {steps}; stored steps={previous_steps[seed]}")
     reports: list[Path] = []
     for seed in seeds:
         run_root = suite_root / f"seed-{seed}"
         env = dict(os.environ, MUJOCO_RL_OUTPUT_ROOT=str(run_root))
-        if not evaluate_only:
+        remaining = steps - previous_steps.get(seed, 0)
+        if not evaluate_only and remaining > 0:
             command = [
                 sys.executable, "-m", "src.train",
-                "--steps", str(steps), "--seed", str(seed),
+                "--steps", str(remaining), "--seed", str(seed),
                 "--device", device,
-                "--eval-freq", str(max(256, steps // 4)),
-                "--checkpoint-freq", str(max(1024, steps // 2)),
+                "--eval-freq", str(max(256, remaining // 4)),
+                "--checkpoint-freq", str(max(1024, remaining // 2)),
             ]
             if resume:
                 command.append("--resume")
             print(f"[suite] Training seed={seed} output={run_root}", flush=True)
             subprocess.run(command, cwd=ROOT, env=env, check=True)
+        elif not evaluate_only:
+            print(f"[suite] Seed={seed} already at target {steps}; skipping duplicate training", flush=True)
         print(f"[suite] Evaluating seed={seed}", flush=True)
         subprocess.run(
             [sys.executable, "-m", "src.evaluate", "--episodes", str(episodes),
@@ -100,7 +126,7 @@ def main() -> None:
     parser.add_argument("--name", default="ant-sac-baseline")
     parser.add_argument("--seeds", type=parse_seeds, default=[0, 1, 2, 3, 4])
     parser.add_argument("--steps", type=positive_int, default=1_000_000,
-                        help="Training steps per seed; on --resume, additional steps per seed")
+                        help="Target total training steps per seed; --resume trains only the missing steps")
     parser.add_argument("--episodes", type=positive_int, default=10)
     parser.add_argument("--eval-seed", type=int, default=1000)
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu")
