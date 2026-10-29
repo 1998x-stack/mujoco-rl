@@ -48,7 +48,8 @@ def contract_digest(contract: dict) -> str:
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def read_manifest(path: Path = MANIFEST) -> dict | None:
+def read_manifest(path: Path | None = None) -> dict | None:
+    path = MANIFEST if path is None else path
     if not path.exists():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
