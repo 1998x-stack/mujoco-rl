@@ -48,6 +48,11 @@ def contract_digest(contract: dict) -> str:
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def comparable_digest(contract: dict) -> str:
+    """Fingerprint shared training configuration, excluding independent seed."""
+    return contract_digest({key: value for key, value in contract.items() if key != "seed"})
+
+
 def read_manifest(path: Path | None = None) -> dict | None:
     path = MANIFEST if path is None else path
     if not path.exists():
@@ -92,6 +97,7 @@ def create_manifest(*, seed: int, device: str = "cpu") -> dict:
         "schema": 1,
         "contract": contract,
         "fingerprint": contract_digest(contract),
+        "configuration_fingerprint": comparable_digest(contract),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
