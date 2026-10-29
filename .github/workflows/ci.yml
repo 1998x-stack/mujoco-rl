@@ -22,6 +22,10 @@ jobs:
           cache: pip
       - name: Install packages
         run: python -m pip install -r requirements.txt
+      - name: Install static analysis tools
+        run: python -m pip install -r requirements-dev.txt
+      - name: Static analysis (Ruff)
+        run: ruff check src tests
       - name: Compile all Python modules
         run: python -m compileall -q src tests
       - name: Run contract and failure-injection tests
@@ -38,6 +42,12 @@ jobs:
           python -m src.train --steps 2 --fresh --eval-freq 2 --checkpoint-freq 2
           python -c "from pathlib import Path; x=list(Path('models/archive').iterdir()); assert len(x)==1; assert (x[0]/'models/latest.json').is_file(); assert (x[0]/'logs/evaluation.json').is_file(); assert (x[0]/'models/snapshots').is_dir(); assert (x[0]/'models/checkpoints').is_dir()"
           python -m src.evaluate --episodes 1
+      - name: Multi-seed benchmark integration
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python -m src.sweep --name ci-multiseed --seeds 11,12 --steps 260 --episodes 1
+          python -c "import json; from pathlib import Path; p=Path('runs/ci-multiseed/benchmark.json'); d=json.loads(p.read_text()); assert d['number_of_training_seeds']==2; assert len(d['runs'])==2; assert d['confidence_interval_95'][0]<=d['mean_reward']<=d['confidence_interval_95'][1]"
       - name: Run Bash syntax checks
         if: runner.os != 'Windows'
         shell: bash
