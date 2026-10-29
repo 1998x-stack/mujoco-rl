@@ -10,7 +10,7 @@ import numpy as np
 from stable_baselines3 import SAC
 
 from .common import ENV_ID, LOGS, MODELS, ensure_dirs, make_env, resolve_model
-from .provenance import read_manifest
+from .provenance import comparable_digest, read_manifest
 
 
 def main() -> None:
@@ -60,6 +60,7 @@ def main() -> None:
         "environment": ENV_ID, "evaluation_seed": args.seed,
         "training_seed": manifest["contract"]["seed"] if manifest else None,
         "contract_fingerprint": manifest["fingerprint"] if manifest else None,
+        "configuration_fingerprint": comparable_digest(manifest["contract"]) if manifest else None,
         "episodes": results, "mean_reward": float(np.mean([r["reward"] for r in results])),
         "std_reward": float(np.std([r["reward"] for r in results])),
         "mean_forward_displacement_x": float(np.mean([r["forward_displacement_x"] for r in results])),
