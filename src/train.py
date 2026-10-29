@@ -2,17 +2,20 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import random
+import uuid
 
 import numpy as np
 import torch
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback, EvalCallback
 
-from .checkpoint import (LATEST, load_best_score, load_checkpoint_paths,
+from .checkpoint import (load_best_score, load_checkpoint_paths,
                          save_best_score, save_checkpoint)
 from .common import (BEST_MODEL, ENV_ID, FINAL_MODEL, LOGS, MODELS,
                      REPLAY_BUFFER, ensure_dirs, make_env)
+from .experiment import archive_active_artifacts, has_active_artifacts
 
 BEST_SCORE = BEST_MODEL.parent / "score.json"
 
@@ -64,26 +67,13 @@ def main() -> None:
     args = parser.parse_args()
     ensure_dirs()
 
-    previous_exists = LATEST.is_file() or FINAL_MODEL.is_file() or BEST_MODEL.is_file()
+    previous_exists = has_active_artifacts()
     if previous_exists and not (args.resume or args.fresh):
-        parser.error("Existing training artifacts detected; use --resume or --fresh (archives previous artifacts).")
-    if args.fresh and previous_exists:
-        from datetime import datetime, timezone
-        import shutil
-        import uuid
-        archive = MODELS / "archive" / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8])
-        archive.mkdir(parents=True)
-        for path in (LATEST, FINAL_MODEL, REPLAY_BUFFER, BEST_MODEL, BEST_SCORE):
-            if path.exists():
-                dest = archive / path.relative_to(MODELS)
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(path), str(dest))
-        if LOGS.exists():
-            for old in LOGS.iterdir():
-                dest = archive / "logs" / old.name
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old), str(dest))
-        print(f"Archived previous experiment metadata, logs and models: {archive}", flush=True)
+        parser.error("Existing experiment artifacts detected; use --resume or --fresh (archives previous artifacts).")
+    if args.fresh:
+        archive = archive_active_artifacts()
+        if archive:
+            print(f"Archived previous experiment outputs: {archive}", flush=True)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -121,6 +111,9 @@ def main() -> None:
 
         eval_freq = args.eval_freq or max(1024, args.steps // 4)
         checkpoint_freq = args.checkpoint_freq or max(2048, args.steps // 2)
+        # Keep each invocation's EvalCallback history; its default NPZ path
+        # would overwrite prior evaluation episodes on every --resume.
+        eval_run = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
         callbacks = CallbackList([
             CheckpointCallback(
                 save_freq=checkpoint_freq,
@@ -129,7 +122,7 @@ def main() -> None:
             ),
             PersistentEvalCallback(
                 eval_env, best_model_save_path=str(BEST_MODEL.parent),
-                log_path=str(LOGS / "eval_history"),
+                log_path=str(LOGS / "eval_history" / eval_run),
                 eval_freq=eval_freq, n_eval_episodes=2,
                 deterministic=True, render=False, verbose=1,
                 resume=args.resume,
