@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import numpy as np
 from stable_baselines3 import SAC
 
+from .checkpoint import load_checkpoint_paths
 from .common import ENV_ID, LOGS, MODELS, ensure_dirs, make_env, resolve_model
 from .provenance import comparable_digest, read_manifest
 
@@ -30,6 +31,8 @@ def main() -> None:
         checksum = sha256()
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             checksum.update(chunk)
+    checkpoint = load_checkpoint_paths() if manifest is not None else None
+    training_budget = int(checkpoint[2]["timesteps"]) if checkpoint is not None else None
     model = SAC.load(str(path), device="cpu")
     env = make_env()
     results = []
@@ -59,6 +62,7 @@ def main() -> None:
         "schema": 2, "model": str(path), "model_sha256": checksum.hexdigest(),
         "environment": ENV_ID, "evaluation_seed": args.seed,
         "training_seed": manifest["contract"]["seed"] if manifest else None,
+        "training_budget_timesteps": training_budget,
         "contract_fingerprint": manifest["fingerprint"] if manifest else None,
         "configuration_fingerprint": comparable_digest(manifest["contract"]) if manifest else None,
         "episodes": results, "mean_reward": float(np.mean([r["reward"] for r in results])),
