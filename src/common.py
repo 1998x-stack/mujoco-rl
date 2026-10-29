@@ -23,7 +23,8 @@ def make_env(*, render_mode: str | None = None, seed: int | None = None, monitor
     env = gym.make(ENV_ID, render_mode=render_mode)
     if monitor_file is not None:
         from stable_baselines3.common.monitor import Monitor
-        env = Monitor(env, filename=str(monitor_file))
+        # Reopening a monitor on --resume must append rather than truncate data.
+        env = Monitor(env, filename=str(monitor_file), override_existing=False)
     if seed is not None:
         env.reset(seed=seed)
         env.action_space.seed(seed)
