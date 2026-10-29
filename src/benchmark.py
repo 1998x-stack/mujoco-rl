@@ -33,6 +33,8 @@ def load_report(path: Path) -> dict:
         raise ValueError(f"Untracked training seed (legacy or external model): {path}")
     if not isinstance(report.get("contract_fingerprint"), str) or len(report["contract_fingerprint"]) != 64:
         raise ValueError(f"Missing training configuration fingerprint: {path}")
+    if not isinstance(report.get("configuration_fingerprint"), str) or len(report["configuration_fingerprint"]) != 64:
+        raise ValueError(f"Missing shared configuration fingerprint: {path}")
     if not isinstance(report.get("model_sha256"), str) or len(report["model_sha256"]) != 64:
         raise ValueError(f"Missing model SHA256: {path}")
     episodes = report.get("episodes")
@@ -54,6 +56,7 @@ def load_report(path: Path) -> dict:
         "mean_reward": avg,
         "model_sha256": report["model_sha256"],
         "contract_fingerprint": report["contract_fingerprint"],
+        "configuration_fingerprint": report["configuration_fingerprint"],
         "report_path": str(path.resolve()),
     }
 
@@ -81,6 +84,9 @@ def aggregate(paths: list[Path], *, min_seeds: int = 2, bootstrap_samples: int =
     protocols = {(item["evaluation_seed"], item["episode_count"]) for item in reports}
     if len(protocols) != 1:
         raise ValueError("Incompatible evaluation protocols: seed or episode count differs")
+    fingerprints = {item["configuration_fingerprint"] for item in reports}
+    if len(fingerprints) != 1:
+        raise ValueError("Training configuration differs across seeds")
     scores = [item["mean_reward"] for item in reports]
     center = mean(scores)
     rng = Random(bootstrap_seed)
@@ -93,6 +99,7 @@ def aggregate(paths: list[Path], *, min_seeds: int = 2, bootstrap_samples: int =
         "schema": 1,
         "environment": ENV_ID,
         "algorithm": "SAC",
+        "configuration_fingerprint": next(iter(fingerprints)),
         "number_of_training_seeds": len(seeds),
         "evaluation_seed": eval_seed,
         "episodes_per_seed": episode_count,
