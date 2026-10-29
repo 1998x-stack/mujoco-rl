@@ -56,7 +56,9 @@ Linux integration job also exercises independent seed isolation and
 benchmark aggregation. Check the latest Actions results before claiming
 that any specific revision passed.
 
-Validate the resulting artifacts using \`python -m src.verify --require-evaluation\` in each experiment's output root. The multi-seed suite resumes to a **target total** training budget; unlike \`src.train --steps\`, it does not repeat completed steps on retry. The aggregator refuses unequal budgets.\n\nSee [Production readiness](docs/PRODUCTION_READINESS.md), [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md).
+Validate the resulting artifacts using `python -m src.verify --require-evaluation` in each experiment's output root. The multi-seed suite resumes to a **target total** training budget; unlike `src.train --steps`, it does not repeat completed steps on retry. The aggregator refuses unequal budgets.
+
+See [Production readiness](docs/PRODUCTION_READINESS.md), [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md).
 **Load only trusted model and replay-buffer artifacts:** a checksum checks
 integrity, not authenticity. This is simulated locomotion, not a
 safety-certified real-world robot controller.
