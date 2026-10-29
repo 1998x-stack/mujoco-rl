@@ -63,6 +63,34 @@ See [Production readiness](docs/PRODUCTION_READINESS.md), [Contributing](CONTRIB
 integrity, not authenticity. This is simulated locomotion, not a
 safety-certified real-world robot controller.
 
+## Ant-v5 five-seed quality benchmark
+
+[Protocol, confidence intervals and exact commands](docs/BENCHMARK_PROTOCOL.md) ·
+[Manual five-seed GitHub Actions workflow](.github/workflows/ant-benchmark.yml)
+
+This repository now separates **quick pipeline checks** from **research-grade
+publication candidates**. Episode returns alone can be misleading for Ant-v5:
+a policy may obtain healthy/survival reward while making little forward progress.
+Evaluation schema v3 also reports signed displacement (m), net x speed (m/s),
+early termination rate, time-limit completion rate and fraction of episodes
+advancing at least 1 metre. The last is an **explicit proxy**, not an automatic
+claim of successful walking.
+
+For a local, expensive five-seed run using project Python:
+
+```bash
+.venv/bin/python -m src.sweep --name ant-v5-paper-v1 \
+  --seeds 0,1,2,3,4 --steps 1000000 --episodes 10 \
+  --eval-seed 1000 --device cpu --publication
+```
+
+The opt-in **Ant-v5 five-seed publication candidate** Actions workflow
+distributes the five independent CPU runs and uploads per-seed policy,
+evaluation, runtime provenance and audit evidence. Only after every seed
+passes does it aggregate bootstrap confidence intervals and a Markdown
+scorecard. The default CI still runs inexpensive smoke checks. **No
+five-million-step benchmark or validated gait score is bundled.**
+
 ## Getting started
 
 Download/clone the repository to a writable local directory. First run requires a compatible 64-bit computer, an internet connection to download Python and packages, and sufficient free disk space. Python 3.11 is provisioned locally by `uv` when necessary; no Conda, Unity, or WSL is required.
