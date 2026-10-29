@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
-from src import benchmark, evidence, provenance, scorecard
+from src import benchmark, evidence, provenance, scorecard, sweep
 from src.quality import summarize, validate_quality
 
 
@@ -134,6 +135,19 @@ class PublicationProtocolTests(unittest.TestCase):
                 report(path, seed, count=9)
             with self.assertRaisesRegex(ValueError, "Publication protocol"):
                 benchmark.aggregate(paths, publication=True)
+
+
+class PublicationSuiteTests(unittest.TestCase):
+    def test_publication_rejects_smoke_budget_before_training(self):
+        with TemporaryDirectory() as temp, patch.object(sweep.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "Publication run requires"):
+                sweep.execute_suite(name="smoke", seeds=[0, 1, 2, 3, 4],
+                                    steps=260, episodes=10, base_dir=Path(temp), publication=True)
+            with self.assertRaisesRegex(ValueError, "Publication run requires"):
+                sweep.execute_suite(name="smoke", seeds=[0, 1, 2, 3],
+                                    steps=1_000_000, episodes=10, base_dir=Path(temp), publication=True)
+            command.assert_not_called()
+
 
 
 class EvidenceBundleTests(unittest.TestCase):
