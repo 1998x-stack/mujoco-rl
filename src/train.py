@@ -16,6 +16,7 @@ from .checkpoint import (load_best_score, load_checkpoint_paths,
 from .common import (BEST_MODEL, ENV_ID, FINAL_MODEL, LOGS, MODELS,
                      REPLAY_BUFFER, ensure_dirs, make_env)
 from .experiment import archive_active_artifacts, has_active_artifacts
+from .provenance import SAC_HYPERPARAMETERS, create_manifest, require_compatible_resume
 
 BEST_SCORE = BEST_MODEL.parent / "score.json"
 
@@ -59,6 +60,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train SAC on MuJoCo Ant-v5")
     parser.add_argument("--steps", type=positive_int, default=2048, help="Additional env steps for this invocation")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu", help="SB3 runtime device (default: CPU)")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--resume", action="store_true", help="Resume latest model and replay buffer")
     mode.add_argument("--fresh", action="store_true", help="Explicitly begin a new experiment, archiving previous artifacts")
@@ -74,6 +76,17 @@ def main() -> None:
         archive = archive_active_artifacts()
         if archive:
             print(f"Archived previous experiment outputs: {archive}", flush=True)
+
+    if args.resume:
+        try:
+            tracked = require_compatible_resume(seed=args.seed, device=args.device)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if not tracked:
+            print("WARNING: legacy checkpoint has no experiment.json; original training configuration cannot be verified", flush=True)
+    else:
+        # Create the new manifest only after --fresh has archived previous outputs.
+        create_manifest(seed=args.seed, device=args.device)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -92,20 +105,15 @@ def main() -> None:
                 model_file, buffer_file = FINAL_MODEL, REPLAY_BUFFER
             else:
                 parser.error("Cannot resume: no checkpoint found; run without --resume first")
-            model = SAC.load(str(model_file), env=train_env, device="cpu", tensorboard_log=str(LOGS))
+            model = SAC.load(str(model_file), env=train_env, device=args.device, tensorboard_log=str(LOGS))
             if not buffer_file.is_file():
                 parser.error(f"Missing replay buffer: {buffer_file}. Recovery requires a matching model and buffer.")
             model.load_replay_buffer(str(buffer_file))
             print(f"Resumed model={model_file}, replay={buffer_file}", flush=True)
         else:
             model = SAC(
-                "MlpPolicy", train_env,
-                learning_rate=3e-4, buffer_size=100_000,
-                learning_starts=256, batch_size=128,
-                tau=0.005, gamma=0.99,
-                train_freq=1, gradient_steps=1,
-                ent_coef="auto", policy_kwargs={"net_arch": [256, 256]},
-                seed=args.seed, device="cpu", verbose=1,
+                "MlpPolicy", train_env, **SAC_HYPERPARAMETERS,
+                seed=args.seed, device=args.device, verbose=1,
                 tensorboard_log=str(LOGS),
             )
 
