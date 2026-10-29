@@ -10,3 +10,6 @@ models/*
 videos/*
 !videos/.gitkeep
 .DS_Store
+
+# Per-seed experimental artifacts (models, replay buffers, reports)
+runs/
