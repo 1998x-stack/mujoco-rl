@@ -128,7 +128,7 @@ class SuiteTests(unittest.TestCase):
 
     def test_isolated_subprocess_invocations(self):
         with TemporaryDirectory() as temp:
-            with patch.object(sweep.subprocess, "run") as caller, \\
+            with patch.object(sweep.subprocess, "run") as caller, \
                  patch.object(sweep, "aggregate", return_value={"schema": 1}) as agg:
                 result = sweep.execute_suite(name="safe", seeds=[11, 22], steps=260,
                                              episodes=2, base_dir=Path(temp))
