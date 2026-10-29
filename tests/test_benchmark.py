@@ -133,6 +133,33 @@ class SuiteTests(unittest.TestCase):
                                         episodes=1, base_dir=Path(temp))
                 caller.assert_not_called()
 
+    def test_resume_skips_completed_seed_and_trains_only_missing_steps(self):
+        with TemporaryDirectory() as temp:
+            base = Path(temp)
+            for seed, steps in ((11, 260), (22, 200)):
+                models = base / "test" / f"seed-{seed}" / "models"
+                snapshot = "snapshot-" + "a" * 32
+                metadata_dir = models / "snapshots" / snapshot
+                metadata_dir.mkdir(parents=True)
+                (models / "latest.json").write_text(json.dumps({"schema": 1, "snapshot": snapshot}))
+                (metadata_dir / "metadata.json").write_text(json.dumps({
+                    "schema": 1, "environment": "Ant-v5", "seed": seed, "timesteps": steps,
+                }))
+                contract = provenance.training_contract(seed=seed)
+                (models / "experiment.json").write_text(json.dumps({
+                    "schema": 1, "contract": contract,
+                    "fingerprint": provenance.contract_digest(contract),
+                }))
+            with patch.object(sweep.subprocess, "run") as caller, \
+                 patch.object(sweep, "aggregate", return_value={"schema": 1}):
+                sweep.execute_suite(name="test", seeds=[11, 22], steps=260, episodes=1,
+                                    base_dir=base, resume=True)
+                self.assertEqual(caller.call_count, 3)
+                training = [x for x in caller.call_args_list if "src.train" in x.args[0]]
+                self.assertEqual(len(training), 1)
+                self.assertIn("--resume", training[0].args[0])
+                self.assertEqual(training[0].args[0][training[0].args[0].index("--steps") + 1], "60")
+
     def test_isolated_subprocess_invocations(self):
         with TemporaryDirectory() as temp:
             with patch.object(sweep.subprocess, "run") as caller, \
