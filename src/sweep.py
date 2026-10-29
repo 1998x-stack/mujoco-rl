@@ -15,6 +15,7 @@ import sys
 
 from .benchmark import aggregate
 from .common import ROOT
+from .provenance import contract_digest, read_manifest, training_contract
 
 
 def parse_seeds(raw: str) -> list[int]:
@@ -82,6 +83,14 @@ def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
             raise FileExistsError(f"Existing artifacts at {run_root}; use --resume or a new --name")
         if (resume or evaluate_only) and not (run_root / "models" / "latest.json").is_file():
             raise FileNotFoundError(f"No completed snapshot for seed={seed}: {run_root}")
+        if resume or evaluate_only:
+            manifest = read_manifest(run_root / "models" / "experiment.json")
+            if manifest is None:
+                raise ValueError(f"Untracked experiment seed={seed}; cannot safely resume/benchmark without manifest")
+            if manifest["contract"].get("seed") != seed:
+                raise ValueError(f"Experiment seed mismatch at {run_root}")
+            if resume and manifest["fingerprint"] != contract_digest(training_contract(seed=seed, device=device)):
+                raise ValueError(f"Resume configuration drift for seed={seed} at {run_root}")
         if resume:
             previous_steps[seed] = saved_training_steps(run_root, seed)
             if previous_steps[seed] > steps:
