@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from src import benchmark, provenance
+from src import benchmark, evidence, provenance, scorecard
 from src.quality import summarize, validate_quality
 
 
@@ -134,6 +134,54 @@ class PublicationProtocolTests(unittest.TestCase):
                 report(path, seed, count=9)
             with self.assertRaisesRegex(ValueError, "Publication protocol"):
                 benchmark.aggregate(paths, publication=True)
+
+
+class EvidenceBundleTests(unittest.TestCase):
+    def test_offline_evidence_check_and_tampering(self):
+        with TemporaryDirectory() as temp:
+            folder = Path(temp)
+            payload = report(folder / "evaluation.json", 4)
+            contract = provenance.training_contract(seed=4)
+            manifest = {
+                "schema": 1,
+                "contract": contract,
+                "fingerprint": provenance.contract_digest(contract),
+                "packages": {
+                    "gymnasium": "1.2.0", "mujoco": "3.3.0",
+                    "stable-baselines3": "2.7.0",
+                },
+            }
+            (folder / "experiment.json").write_text(json.dumps(manifest))
+            policy = folder / "policy.zip"
+            policy.write_bytes(b"simulated-policy-binary")
+            payload["model_sha256"] = evidence.policy_digest(policy)
+            (folder / "evaluation.json").write_text(json.dumps(payload))
+            (folder / "audit.json").write_text(json.dumps({
+                "status": "PASS",
+                "evaluation_verified": True,
+                "trajectory_quality_verified": True,
+                "training_seed": 4,
+                "training_budget_timesteps": 1_000_000,
+                "configuration_fingerprint": provenance.comparable_digest(contract),
+            }))
+            self.assertTrue(evidence.verify_evidence(folder)["verified"])
+            policy.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                evidence.verify_evidence(folder)
+
+    def test_scorecard_uses_measured_values_not_claimed_gait_success(self):
+        with TemporaryDirectory() as temp:
+            paths = [Path(temp) / f"{seed}.json" for seed in range(5)]
+            for seed, path in enumerate(paths):
+                report(path, seed)
+            aggregated = benchmark.aggregate(paths, publication=True, min_seeds=5, bootstrap_samples=100)
+            markdown = scorecard.render_scorecard(aggregated)
+            self.assertIn("publication protocol verified", markdown)
+            self.assertIn("Early termination rate", markdown)
+            self.assertIn("not a statistical guarantee", markdown)
+            aggregated["publication_protocol_verified"] = False
+            smoke = scorecard.render_scorecard(aggregated)
+            self.assertIn("NOT A PUBLISHABLE LEARNING RESULT", smoke)
 
 
 if __name__ == "__main__":
