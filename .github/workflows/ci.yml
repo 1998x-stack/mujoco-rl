@@ -30,8 +30,10 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Static analysis (Ruff)
         run: ruff check src tests
+      - name: Validate expensive benchmark workflow
+        run: python scripts/check_benchmark_workflow.py
       - name: Compile all Python modules
-        run: python -m compileall -q src tests
+        run: python -m compileall -q src tests scripts
       - name: Run contract and failure-injection tests
         run: python -m unittest discover -s tests -v
       - name: Smoke test Ant-v5 physics
@@ -53,7 +55,19 @@ jobs:
         run: |
           python -m src.sweep --name ci-multiseed --seeds 11,12 --steps 260 --episodes 1
           for seed in 11 12; do MUJOCO_RL_OUTPUT_ROOT="$PWD/runs/ci-multiseed/seed-$seed" python -m src.verify --require-evaluation; done
-          python -c "import json; from pathlib import Path; p=Path('runs/ci-multiseed/benchmark.json'); d=json.loads(p.read_text()); assert d['number_of_training_seeds']==2; assert len(d['runs'])==2; assert d['confidence_interval_95'][0]<=d['mean_reward']<=d['confidence_interval_95'][1]"
+          python -c "import json; from pathlib import Path; p=Path('runs/ci-multiseed/benchmark.json'); d=json.loads(p.read_text()); assert d['schema']==2; assert d['number_of_training_seeds']==2; assert not d['publication_protocol_verified']; assert len(d['runs'])==2; assert d['confidence_interval_95'][0]<=d['mean_reward']<=d['confidence_interval_95'][1]; assert 'mean_forward_displacement_x' in d['quality_metrics']"
+          python -m src.scorecard runs/ci-multiseed/benchmark.json --output runs/ci-multiseed/SCORECARD.md
+          python -c "from pathlib import Path; assert 'NOT A PUBLISHABLE LEARNING RESULT' in Path('runs/ci-multiseed/SCORECARD.md').read_text()"
+          if python -m src.benchmark runs/ci-multiseed/seed-*/logs/evaluation.json --publication >/dev/null 2>&1; then echo 'ERROR: smoke benchmark passed publication gate' >&2; exit 1; fi
+          for seed in 11 12; do
+            ROOT="$PWD/runs/ci-multiseed/seed-$seed"
+            mkdir -p "runs/ci-multiseed/bundle-$seed"
+            cp "$ROOT/logs/evaluation.json" "runs/ci-multiseed/bundle-$seed/evaluation.json"
+            cp "$ROOT/models/experiment.json" "runs/ci-multiseed/bundle-$seed/experiment.json"
+            cp "$ROOT/models/best/best_model.zip" "runs/ci-multiseed/bundle-$seed/policy.zip"
+            MUJOCO_RL_OUTPUT_ROOT="$ROOT" python -m src.verify --require-evaluation > "runs/ci-multiseed/bundle-$seed/audit.json"
+            python -m src.evidence "runs/ci-multiseed/bundle-$seed"
+          done
       - name: Run Bash syntax checks
         if: runner.os != 'Windows'
         shell: bash

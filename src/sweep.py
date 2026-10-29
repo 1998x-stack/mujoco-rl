@@ -64,12 +64,14 @@ def saved_training_steps(run_root: Path, seed: int) -> int:
 
 def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
                   base_dir: Path, resume: bool = False, evaluate_only: bool = False,
-                  eval_seed: int = 1000, device: str = "cpu") -> Path:
+                  eval_seed: int = 1000, device: str = "cpu", publication: bool = False) -> Path:
     validate_name(name)
     if len(seeds) < 2 or len(set(seeds)) != len(seeds):
         raise ValueError("At least two distinct training seeds are required")
     if steps < 1 or episodes < 1 or (resume and evaluate_only):
         raise ValueError("Invalid step/episode count or incompatible run modes")
+    if publication and (len(seeds) < 5 or steps < 1_000_000 or episodes < 10):
+        raise ValueError("Publication run requires >=5 seeds, >=1M steps/seed and >=10 episodes/seed")
     suite_root = base_dir.expanduser().resolve() / name
     # A partially completed suite is never overwritten with fresh training.
     # --resume is explicit and each subprocess validates its own manifest.
@@ -120,8 +122,13 @@ def execute_suite(*, name: str, seeds: list[int], steps: int, episodes: int,
              "--seed", str(eval_seed)],
             cwd=ROOT, env=env, check=True,
         )
+        if publication:
+            # Validate the actual replay/model snapshot and evaluated policy
+            # before accepting a run into an official local scorecard.
+            subprocess.run([sys.executable, "-m", "src.verify", "--require-evaluation"],
+                           cwd=ROOT, env=env, check=True)
         reports.append(run_root / "logs" / "evaluation.json")
-    results = aggregate(reports, min_seeds=len(seeds))
+    results = aggregate(reports, min_seeds=len(seeds), publication=publication)
     destination = suite_root / "benchmark.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(results, indent=2, sort_keys=True, allow_nan=False) + "\n",
@@ -139,6 +146,8 @@ def main() -> None:
     parser.add_argument("--episodes", type=positive_int, default=10)
     parser.add_argument("--eval-seed", type=int, default=1000)
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default="cpu")
+    parser.add_argument("--publication", action="store_true",
+                        help="Enforce >=5 independent seeds, >=1M steps/seed, >=10 episodes and quality checks")
     parser.add_argument("--base-dir", type=Path, default=ROOT / "runs")
     choices = parser.add_mutually_exclusive_group()
     choices.add_argument("--resume", action="store_true")
@@ -148,7 +157,7 @@ def main() -> None:
         execute_suite(name=args.name, seeds=args.seeds, steps=args.steps,
                       episodes=args.episodes, base_dir=args.base_dir,
                       resume=args.resume, evaluate_only=args.evaluate_only,
-                      eval_seed=args.eval_seed, device=args.device)
+                      eval_seed=args.eval_seed, device=args.device, publication=args.publication)
     except (ValueError, FileNotFoundError, FileExistsError) as exc:
         parser.error(str(exc))
 

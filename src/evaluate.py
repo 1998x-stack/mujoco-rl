@@ -12,6 +12,7 @@ from stable_baselines3 import SAC
 from .checkpoint import load_checkpoint_paths
 from .common import ENV_ID, LOGS, MODELS, ensure_dirs, make_env, resolve_model
 from .provenance import comparable_digest, read_manifest
+from .quality import PROGRESS_THRESHOLD_METERS, summarize
 
 
 def main() -> None:
@@ -36,6 +37,10 @@ def main() -> None:
     model = SAC.load(str(path), device="cpu")
     env = make_env()
     results = []
+    time_step = float(env.unwrapped.dt)
+    if not isfinite(time_step) or time_step <= 0:
+        env.close()
+        raise ValueError('Invalid physics time step')
     try:
         for i in range(args.episodes):
             obs, _ = env.reset(seed=args.seed + i)
@@ -52,19 +57,35 @@ def main() -> None:
             dx = float(env.unwrapped.data.qpos[0]) - initial_x
             if not isfinite(reward_sum) or not isfinite(dx):
                 raise ValueError("Non-finite episode reward or displacement")
-            result = {"episode": i + 1, "reward": reward_sum, "steps": n_steps, "forward_displacement_x": dx,
-                      "terminated": bool(terminated), "truncated": bool(truncated)}
+            elapsed = n_steps * time_step
+            result = {
+                "episode": i + 1, "reward": reward_sum, "steps": n_steps,
+                "forward_displacement_x": dx, "elapsed_simulation_seconds": elapsed,
+                "mean_forward_speed_x": dx / elapsed,
+                "terminated": bool(terminated), "truncated": bool(truncated),
+            }
             results.append(result)
             print(f"Episode {i+1}/{args.episodes}: reward={reward_sum:.2f}, steps={n_steps}, forward_x={dx:.3f}", flush=True)
     finally:
         env.close()
     summary = {
-        "schema": 2, "model": str(path), "model_sha256": checksum.hexdigest(),
+        "schema": 3, "model": str(path), "model_sha256": checksum.hexdigest(),
         "environment": ENV_ID, "evaluation_seed": args.seed,
         "training_seed": manifest["contract"]["seed"] if manifest else None,
         "training_budget_timesteps": training_budget,
         "contract_fingerprint": manifest["fingerprint"] if manifest else None,
         "configuration_fingerprint": comparable_digest(manifest["contract"]) if manifest else None,
+        "environment_versions": {
+            k: manifest["packages"].get(k) for k in ("gymnasium", "mujoco", "stable-baselines3")
+        } if manifest else None,
+        "evaluation_protocol": {
+            "deterministic_policy": True,
+            "episode_seeding": "evaluation_seed_plus_index",
+            "progress_threshold_meters": PROGRESS_THRESHOLD_METERS,
+            "physics_time_step_seconds": time_step,
+            "max_episode_steps": env.spec.max_episode_steps,
+        },
+        "quality": summarize(results),
         "episodes": results, "mean_reward": float(np.mean([r["reward"] for r in results])),
         "std_reward": float(np.std([r["reward"] for r in results])),
         "mean_forward_displacement_x": float(np.mean([r["forward_displacement_x"] for r in results])),
