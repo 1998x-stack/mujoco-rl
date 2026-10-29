@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from src import checkpoint, common
+from src import checkpoint, common, experiment
 
 
 class DummyModel:
@@ -79,6 +79,47 @@ class ProjectTests(unittest.TestCase):
             with patch.object(checkpoint, "SNAPSHOTS", root), patch.object(checkpoint, "LATEST", pointer):
                 with self.assertRaisesRegex(ValueError, "Invalid checkpoint pointer"):
                     checkpoint.load_checkpoint_paths()
+
+
+    def test_fresh_ignores_empty_scaffolding_and_archives_all_outputs(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            models, logs, videos = (root / name for name in ("models", "logs", "videos"))
+            with patch.object(experiment, "MODELS", models), \
+                 patch.object(experiment, "LOGS", logs), \
+                 patch.object(experiment, "VIDEOS", videos):
+                for folder in (models / "best", models / "checkpoints", logs, videos):
+                    folder.mkdir(parents=True)
+                    (folder / ".gitkeep").touch()
+                self.assertFalse(experiment.has_active_artifacts())
+                self.assertIsNone(experiment.archive_active_artifacts())
+
+                outputs = {
+                    models / "latest.json": b'{"snapshot":"snapshot-test"}',
+                    models / "snapshots" / "snapshot-test" / "model.zip": b"model",
+                    models / "snapshots" / "snapshot-test" / "replay_buffer.pkl": b"buffer",
+                    models / "checkpoints" / "ant_sac_260_steps.zip": b"periodic",
+                    models / "best" / "best_model.zip": b"best",
+                    models / "best" / "score.json": b"score",
+                    logs / "train_monitor.monitor.csv": b"r,l,t\\n",
+                    logs / "eval_history" / "old" / "evaluations.npz": b"npz",
+                    videos / "ant_demo.mp4": b"video",
+                }
+                for path, content in outputs.items():
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(content)
+
+                archive = experiment.archive_active_artifacts()
+                self.assertIsNotNone(archive)
+                for original, expected in outputs.items():
+                    self.assertFalse(original.exists(), str(original))
+                    self.assertEqual(
+                        (archive / original.relative_to(root)).read_bytes(),
+                        expected,
+                    )
+                # A retained archive alone must not block a new experiment.
+                self.assertFalse(experiment.has_active_artifacts())
+                self.assertIsNone(experiment.archive_active_artifacts())
 
 
 if __name__ == "__main__":
