@@ -37,10 +37,10 @@ The `*.cmd` wrappers use PowerShell in a process-scoped execution-policy overrid
 
 ## Manage models and artifacts
 
-- `models/ant_sac_latest.zip` — latest SAC model; `models/ant_sac_replay_buffer.pkl` — experience needed for resume.
+- `models/latest.json` — active atomic pointer to `models/snapshots/snapshot-*/model.zip` and `replay_buffer.pkl` (SHA-256 checked). The old `models/ant_sac_latest.zip` and replay buffer paths are only legacy migration fallbacks.
 - `models/best/best_model.zip` — highest mean periodic evaluation reward so far; available only after a completed callback evaluation.
-- `models/checkpoints/` — periodic model and buffer checkpoints. Old buffers may occupy substantial disk space.
-- `logs/evaluation.json` — evaluation metrics, `logs/rewards.png` — plot if enough episodes completed.
+- `models/checkpoints/` — periodic model and buffer checkpoints. `--fresh` archives them together with snapshots, active models, logs and videos under `models/archive/`; existing archives are retained.
+- `logs/evaluation.json` — latest standalone evaluation metrics; `logs/eval_history/<run-id>/evaluations.npz` — separate callback histories from each invocation; `logs/train_monitor.monitor.csv` appends on resume; `logs/rewards.png` — episode reward plot.
 - `videos/ant_demo.mp4` — optional rendered preview.
 
 From scratch without previous run's weights: use `./run.sh --full` or `.\run.cmd -Full` after archiving your older `models/` and `logs/` if you want to compare independent experiments. `--full` and `-Full` request a million *additional* steps for that invocation, not a wall-clock duration or guaranteed gait quality.

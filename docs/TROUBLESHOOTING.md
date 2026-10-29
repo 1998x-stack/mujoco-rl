@@ -54,7 +54,7 @@ The pipeline reports a rendering failure explicitly instead of silently claiming
 
 ## `Cannot resume` / models not found
 
-Run a first experiment without `--resume` / `-Resume`. Resume needs `models/ant_sac_latest.zip`. `models/ant_sac_replay_buffer.pkl` improves continuity but is not guaranteed to reproduce an uninterrupted run. If a hard crash preempted a latest save, inspect `models/checkpoints/`. For explicit model selection use `--model models/ant_sac_latest.zip` (Unix) or `-Model models/ant_sac_latest.zip` (`watch.ps1`).
+Run a first experiment without `--resume` / `-Resume`. Resume uses `models/latest.json` to locate a matching immutable model and replay buffer snapshot; both SHA-256 hashes must pass. Historical `models/ant_sac_latest.zip` and `models/ant_sac_replay_buffer.pkl` are supported only when the new pointer is absent. If a hard crash preempted publishing a new snapshot, the previous valid snapshot remains active; inspect `models/snapshots/` and `models/checkpoints/` for orphaned/newer artifacts. For playback, the default model resolves to `models/best/best_model.zip` when present; provide an explicit path with `--model PATH` to Python modules or `-Model PATH` to `watch.ps1`.
 
 ## Training seems slow, robot does not walk, or out of memory/disk
 

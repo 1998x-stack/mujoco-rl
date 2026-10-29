@@ -33,3 +33,17 @@ The checkpoint pointer is an application-level consistency mechanism on a local 
 3. Add configurable replay/snapshot retention and manual recovery selection for historic snapshots.
 4. Track experiments by run ID, add multi-seed evaluation and uncertainty summaries.
 5. For exact resume, serialize relevant environment, RNG, callback and optimizer state; verify interrupted-versus-uninterrupted runs experimentally.
+
+## Follow-up audit (2026-10-29)
+
+Reviewed current `main` at `0901fca3b349507b832e16fb3e1bf15c1821ae84`. The existing GitHub Actions run `35573741195` **passed** on Linux, macOS and Windows; however, only Linux ran the 260-step SAC training/resume/evaluate integration. Passing physics smoke checks on macOS/Windows alone does not validate cross-platform training or snapshot recovery.
+
+This change set addresses three independently verified source-level failure modes:
+
+1. `--fresh` formerly moved a small hard-coded list of active models and logs, but left `models/snapshots`, `models/checkpoints`, videos, and unlisted outputs behind. The new isolation module archives every meaningful active item in models/logs/videos (excluding existing archives), including incomplete prior-run output; it ignores empty scaffold folders.
+2. SB3 Monitor was constructed with its default `override_existing=True`, truncating the CSV on resume. It now explicitly sets `override_existing=False` (append behavior documented by SB3).
+3. Each new `EvalCallback` wrote to the same `logs/eval_history/evaluations.npz`; histories now have an invocation-specific directory, preventing overwrite on resume.
+
+The cross-platform workflow now includes SAC training, resume, evaluation, and fresh isolation on all three operating systems. **Its success must be checked on the new PR run; the historical green run is not evidence that these new changes pass.**
+
+Still out of scope: bitwise-identical environment/RNG continuation; best-model ZIP and best-score metadata as one atomic transaction; run-level hyperparameter/config manifests; multi-seed performance benchmarking; bounded retention of very large replay buffers. Neither 260 nor 2,048 training steps demonstrates a learned walking policy.

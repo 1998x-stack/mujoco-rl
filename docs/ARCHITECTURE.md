@@ -17,7 +17,7 @@ Linux/macOS run.sh          Windows run.cmd -> run.ps1
           |                  |
         MuJoCo physics <-> observations/actions/rewards
                      |
-    latest model + replay buffer + periodic checkpoints
+    immutable latest snapshot + replay buffer + periodic checkpoints
                      |
              src.evaluate -> JSON
              src.plot     -> PNG if training episodes
@@ -39,7 +39,7 @@ The short 2048-step default validates the stack; the 1M-step mode is an experime
 
 ## Resume and reproducibility
 
-Both `--resume` and `-Resume` load the most recent SAC model and (if present) experience buffer. Repeated runs can overwrite latest artifacts, and a previously saved best checkpoint can remain from another run. For independent experiments, archive old models/logs first. Restarting a process will not in general exactly reproduce an uninterrupted run, due to RNG/environment state and evaluation timing. Hard kills/power loss may preempt the `finally` save; check periodic checkpoints.
+Both `--resume` and `-Resume` require a matching SAC model and replay buffer; an incomplete pair is rejected. New snapshots are immutable and published through an integrity-checked latest pointer. `--fresh` / `-Fresh` archives old active models, snapshots, checkpoint directories, logs and videos beneath `models/archive/`, without moving previous archives. Monitor episode CSVs append on resume; callback evaluation histories are stored in distinct per-invocation directories. Restarting a process will not in general exactly reproduce an uninterrupted run, due to RNG/environment state and evaluation timing. Hard kills/power loss may preempt the `finally` save; check periodic checkpoints.
 
 The `requirements.txt` supplies compatible version ranges, not an exact lockfile. For comparative experiments record the installed package versions, Python version, platform, random seeds, and any modifications to training configuration.
 
