@@ -1,2 +1,2 @@
 # Development-only quality gate; runtime requirements remain in requirements.txt.
-ruff>=0.12,<1
+ruff>=0.17.2,<1
