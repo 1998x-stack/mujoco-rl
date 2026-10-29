@@ -5,4 +5,4 @@ stable-baselines3>=2.6,<2.8
 tensorboard>=2.16,<3
 imageio>=2.34,<3
 imageio-ffmpeg>=0.5,<1
-matplotlib>=3.8,<4
+matplotlib>=3.11.2,<4
