@@ -22,6 +22,7 @@ def fake_report(path: Path, seed: int, rewards=(2.0, 4.0), *,
         "contract_fingerprint": provenance.contract_digest(contract),
         "configuration_fingerprint": provenance.comparable_digest(contract),
         "training_seed": seed,
+        "training_budget_timesteps": 1000000,
         "evaluation_seed": eval_seed,
         "episodes": [{"reward": reward} for reward in rewards],
         "mean_reward": sum(rewards) / len(rewards),
@@ -85,6 +86,12 @@ class BenchmarkTests(unittest.TestCase):
                 benchmark.aggregate([a, b], bootstrap_samples=100)
             fake_report(b, 2, device="cuda")
             with self.assertRaisesRegex(ValueError, "Training configuration differs"):
+                benchmark.aggregate([a, b], bootstrap_samples=100)
+            fake_report(b, 2)
+            broken = json.loads(b.read_text())
+            broken["training_budget_timesteps"] = 800000
+            b.write_text(json.dumps(broken))
+            with self.assertRaisesRegex(ValueError, "Unequal training budgets"):
                 benchmark.aggregate([a, b], bootstrap_samples=100)
 
     def test_reject_untracked_or_inflated_scores(self):
