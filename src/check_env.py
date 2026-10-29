@@ -14,7 +14,9 @@ def main() -> None:
     if args.steps < 1:
         parser.error("--steps must be positive")
 
-    import gymnasium, mujoco, stable_baselines3
+    import gymnasium
+    import mujoco
+    import stable_baselines3
     print(f"Host: {platform.platform()} ({platform.machine()})")
     print(f"gymnasium={gymnasium.__version__}, mujoco={mujoco.__version__}, stable_baselines3={stable_baselines3.__version__}")
     env = make_env(seed=42)

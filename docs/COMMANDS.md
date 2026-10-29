@@ -44,3 +44,29 @@ The `*.cmd` wrappers use PowerShell in a process-scoped execution-policy overrid
 - `videos/ant_demo.mp4` — optional rendered preview.
 
 From scratch without previous run's weights: use `./run.sh --full` or `.\run.cmd -Full` after archiving your older `models/` and `logs/` if you want to compare independent experiments. `--full` and `-Full` request a million *additional* steps for that invocation, not a wall-clock duration or guaranteed gait quality.
+
+## Reproducible multi-seed experiment protocol
+
+```bash
+# Total target budget is per seed; default output = runs/<name>/seed-N/
+python -m src.sweep --name baseline --seeds 0,1,2,3,4 --steps 1000000 --episodes 10
+
+# Idempotent retry: train only outstanding steps up to 1,000,000 per seed
+python -m src.sweep --name baseline --seeds 0,1,2,3,4 --steps 1000000 --resume
+
+# Re-evaluate saved policies (no training)
+python -m src.sweep --name baseline --seeds 0,1,2,3,4 --evaluate-only
+
+# Validate one experiment without loading models into a torch process
+MUJOCO_RL_OUTPUT_ROOT="$PWD/runs/baseline/seed-0" python -m src.verify --require-evaluation
+```
+
+The historical `src.train --steps` command takes **additional** timesteps
+per invocation. In contrast, `src.sweep --steps` is a **target total
+training budget**, so retries cannot double-count previously completed
+seeds. On Windows PowerShell, set `$env:MUJOCO_RL_OUTPUT_ROOT` before
+invoking `python -m src.verify`.
+
+Statistics are bootstrapped over independently trained seed means,
+not individual episodes. The comparator refuses duplicated training
+seeds, unequal training budgets or different evaluation protocols.

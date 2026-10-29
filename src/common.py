@@ -1,13 +1,17 @@
 """Shared paths, environment creation, and model loading."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 ENV_ID = "Ant-v5"
 ROOT = Path(__file__).resolve().parents[1]
-MODELS = ROOT / "models"
-LOGS = ROOT / "logs"
-VIDEOS = ROOT / "videos"
+# One output root per experiment prevents independent training seeds from sharing
+# mutable checkpoints, best-model selections, and evaluation history.
+OUTPUT_ROOT = Path(os.environ.get("MUJOCO_RL_OUTPUT_ROOT", str(ROOT))).expanduser().resolve()
+MODELS = OUTPUT_ROOT / "models"
+LOGS = OUTPUT_ROOT / "logs"
+VIDEOS = OUTPUT_ROOT / "videos"
 FINAL_MODEL = MODELS / "ant_sac_latest.zip"
 REPLAY_BUFFER = MODELS / "ant_sac_replay_buffer.pkl"
 BEST_MODEL = MODELS / "best" / "best_model.zip"

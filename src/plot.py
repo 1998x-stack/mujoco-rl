@@ -1,6 +1,5 @@
 """Optional simple graph of episode rewards, saved as a PNG."""
 import csv
-from pathlib import Path
 
 from .common import LOGS
 
